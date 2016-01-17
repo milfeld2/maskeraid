@@ -1,0 +1,147 @@
+DRAFT DOCUMENT
+                 DRAFT DOCUMENT
+                                 DRAFT DOCUMENT
+                                                  DRAFT DOCUMENT
+                                                                   DRAFT DOCUMENT
+
+
+The Fortran API is not ready yet.
+
+
+Maskeraid was originally designed just to display the affinity (mask) of processes that
+are launched by an MPI executable launcher (mpirun, mpiexec, TACC ibrun, etc.).
+When maskeraid is built, it creates mpi_whereami. This MPI executable 
+is then substituted for mpi application executable of the researcher in a test run
+to discover how the launcher would have distributed the application's tasks (ranks).
+In a job script, the user would simple replace the application executable name
+with mpi_whereami (you may need to include a path the executable location), as
+shown below:
+
+           #!/bin/bash
+           #SLURM  -n 16 -N 1
+           ...
+           #Batch Script for TACC machine
+           ...
+           #ibrun ./my_mpi_exec
+            ibrun ./mpi_whereami
+
+The whereami puts a load on the ranks for 10 seconds, so that top can be run on
+a node to observe the core occupation.  (Execute "top", and then press the
+1 key to change the display to show the percentage load on each core.  You can
+reset the load time by setting setting the MASKERAID_LOAD_SECONDS environment 
+variable to a positive integer (units are seconds).
+
+The resulting output for Stampede in Output 1. shows a matrix with rows labeled by the ranks
+of a mpi_whereami MPI tasks for the above launch, the columns represent CPU_ids 
+(core id) with positions representing the the CPU_ids from 0 to ntasks-1, beginning 
+with the first column of the matrix.  
+
+A non-hyphen character in the matrix means that 
+the mpi rank (row value) is allowed to execute in the CPU_id (column value). In the
+output below
+rank 0 is "mapped" to core (CPU_id) 0, rank 1 is mapped to
+core (CPU_id) 1, etc., so as to have each rank execute on only one core (CPU_id). 
+
+To make it easy to determine the CPU_id value in the matrix, the first digit of
+CPU_id (core) number is printed in the matrix.  For CPU_ids larger than 9, the
+The "10s" position value can be read from the column header demarking the set
+by bars (|).  For instance the second set of values {0, 1, 2, 3, 4, 5} along the 
+diagonl represent CPU_id's { 10, 11, 12, 13, 14, and 15}-- the "10" in the header
+"|       10     |" should be added to the unit digits within the matrix to get the 
+CPU_id value.
+
+Put the output  HERE....
+
+------------------------------------------------------------------------------------
+
+More considerations:
+
+Each row of the output matrix represents the mask for the process (rank).  If there
+are multiple non-hypened values within the row, this means that the OS is free
+to move the process and any child processes (read threads) around on the designated
+CPU_ids.  In the above output there were 16 cores available, and the request was
+for 16 MPI tasks. Hence, the mask is what one would expect-- one task for each core.
+
+In a hybrid run, one might execute with 2 MPI tasks on a node, and 8 threads per 
+MPI task.  In this case, one would expect the mask for the 2 MPI processes to 
+have 8 CPU_ids designed for execution by each task (8 on one socket, and 8 on
+another socket).  The easiest way to do this at tacc is to use the tacc_affinity
+script to automatically set numactl commands for the processes.  (See ... for
+details).  Similar to the case above, you can use the hybrid_whereami executablable
+to display the mask for the 2 MPI processes (and the threads).  The hybrid script
+would be similar to the following:
+ 
+
+           #!/bin/bash
+           #SLURM  -n 2 -N 1
+           ...
+           #Batch Script for TACC machine
+           ...
+           #ibrun tacc_affinity ./my_hybrid_exec
+            ibrun tacc_affinity ./hybrid_whereami
+
+
+This test run will produce the following map:
+
+
+Put the output HERE...
+
+For the TACC production nodes on TACC's Stampede machine CPU_ids {0,1,2,3,4,5,6,7}
+are on socket 0, and the others are on socket 1.  The tacc_affinity creates the
+mask for task0 and task1, and the mask for each thread is inherited from the
+MPI process that forks the threads (has an OpenMP parallel region).  Hence,
+all 8 threads on each sockets are free to be moved around on the 8 cores.
+
+Performance might be improved pinning each thread to a single core.  This can
+be done in several ways: 
+   1.)  Masking commands for each thread can be inserted after
+        the threads are generated in an OpenMP parallel region.
+   2.)  KMP variables can be set for intel-compiled code with OpenMP directives.
+   3.)  The 4.0 OpenMP Affinity directives and environmnet variable can be
+        use to map threads to "places".
+
+In hybrid code is may be necessary to turn off MPI affinity settings when using OpenMP.
+With the MVAPICH2 compiler, this is done the in the tacc_affinity scripts.
+
+
+---------------------------------------------------------------- 
+
+
+Instrumenting Your Own Application.
+
+Important elements of Maskeraid were turned into an library, so that users
+could instrument there own applications to display the masks of MPI tasks
+and OpenMP threads.  Instrumentation is simple, just add a single call to
+an MPI or OpenMP code after initialization or the parallel directive, respectively.
+Hybrid codes require 2 API calls -- one in the PURE MPI region, and another
+in the hybrid region (with an OpenMP parallel region).  Simple cases are shown below:
+
+MPI code:
+
+          MPI_Init(...)                        call MPI_Init()
+          ierr = mpi_report_mask()            ierr = mpi_report_mask() 
+          ...                                 ...
+
+OMP code: 
+          #pragma omp parallel private(ierr)  !$omp parallel private(ierr)
+          ierr = omp_report_mask()            ierr = omp_report_mask() 
+          ...                                 ...
+
+HYBrid code: 
+
+          MPI_Init(...)                       call MPI_Init()
+          ierr = hybrid_report_mask()         ierr = hybrid_report_mask() 
+          ...                                 ...
+          #pragma omp parallel private(ierr)  !$omp parallel private(ierr)
+          ierr = hybrid_report_mask()         ierr = hybrid_report_mask() 
+          ...                                 ...
+
+There are other utilities in the library:
+
+load_cpu_nsec( nsec )   --- Loads up a process/thread for nsec seconds (int operations)
+gtod_timer()           --- Easy to use Get Time of Day clock 
+map_to_cpuid(cpu_id)   --- Sets process/thread map to a single core (cpuid).
+
+See code for details.
+tsc()          -- Time Stamp Counter
+
