@@ -1,4 +1,4 @@
-# Makefile for the Makeraid executables and library
+# Makefile for the Maskeraid executables and library
 
 CC_SER  =   icc
 CC_MPI  = mpicc
