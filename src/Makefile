@@ -1,3 +1,5 @@
+# Makefile for the Makeraid executables and library
+
 CC_SER  =   icc
 CC_MPI  = mpicc
 CC_OMP  =   icc -openmp
