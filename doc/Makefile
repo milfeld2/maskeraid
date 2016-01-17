@@ -1,4 +1,4 @@
-# Makefile for the Maskeraid document in LaTex format.
+# For making pdf Maskeraid user guide LaTex tex file.
 
 version=0.9
 Mug =  maskeraid_user_guide-$(version)
