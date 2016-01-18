@@ -1,4 +1,5 @@
 #!/bin/bash
+# Simple way to make a tar file.
 list='
 License
 Makefile
